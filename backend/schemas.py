@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
@@ -9,6 +9,12 @@ class DepartmentCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     parent_id: Optional[str] = None
     sort: int = 0
+
+
+class DepartmentUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=128)
+    parent_id: Optional[str] = None
+    sort: Optional[int] = None
 
 
 class DepartmentResponse(BaseModel):
@@ -338,7 +344,11 @@ class TaskResponse(BaseModel):
     app_id: Optional[str] = None
     biz_task_id: str = ""
     agent_session_id: str = ""
+    project_id: Optional[str] = None
+    item_id: Optional[str] = None
     progress_note: str = ""
+    progress_pct: int = 0
+    progress_steps: List[Dict[str, Any]] = []
     result: Dict[str, Any] = {}
     artifacts: List[Any] = []
     tokens_used: int = 0
@@ -459,3 +469,176 @@ class InboxMessageResponse(BaseModel):
 
 class InboxUnreadCountResponse(BaseModel):
     unread_count: int = 0
+
+
+# --- Projects / Workbench ---
+
+class ProjectCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=256)
+    description: str = ""
+    sort: int = 0
+
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=256)
+    description: Optional[str] = None
+    status: Optional[str] = None
+    sort: Optional[int] = None
+    progress_pct: Optional[int] = None
+
+
+class ProjectItemCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=256)
+    description: str = ""
+    parent_id: Optional[str] = None
+    sort: int = 0
+
+
+class ProjectItemUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    worker_id: Optional[str] = None
+    progress_pct: Optional[int] = None
+    meta: Optional[Dict[str, Any]] = None
+
+
+class DelegateItemRequest(BaseModel):
+    worker_id: str
+    instruction: str = Field(..., min_length=1)
+    task_type: str = ""
+    conv_id: Optional[str] = None
+    auto_start: bool = False
+
+
+class ProjectItemOut(BaseModel):
+    item_id: str
+    project_id: str
+    parent_id: Optional[str] = None
+    name: str
+    description: str = ""
+    status: str = "TODO"
+    sort: int = 0
+    worker_id: Optional[str] = None
+    worker_name: str = ""
+    task_id: Optional[str] = None
+    progress_pct: int = 0
+    meta: Dict[str, Any] = {}
+    planned_start: Optional[datetime] = None
+    planned_end: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    children: List["ProjectItemOut"] = []
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class ProjectOwnerOut(BaseModel):
+    user_id: str = ""
+    name: str = ""
+    avatar: str = ""
+    title: str = ""
+    dept_name: str = ""
+
+
+class ProjectOut(BaseModel):
+    project_id: str
+    owner_id: str
+    name: str
+    description: str = ""
+    status: str = "ACTIVE"
+    progress_pct: int = 0
+    sort: int = 0
+    item_count: int = 0
+    completed_count: int = 0
+    in_progress_count: int = 0
+    delegated_count: int = 0
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    owner: Optional[ProjectOwnerOut] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class ProjectDetailOut(ProjectOut):
+    items: List[ProjectItemOut] = []
+
+
+class ProjectMemberOut(BaseModel):
+    key: str
+    name: str
+    role: str = ""
+    subtitle: str = ""
+    is_worker: bool = False
+    avatar: str = ""
+    activity: str = ""
+    tag: str = ""
+
+
+class ProjectDocumentOut(BaseModel):
+    doc_id: str
+    project_id: str
+    name: str
+    file_path: str = ""
+    mime_type: str = ""
+    size_bytes: int = 0
+    source: str = "UPLOAD"
+    owner_type: str = "HUMAN"
+    owner_id: str = ""
+    owner_name: str = ""
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class ProjectActivityOut(BaseModel):
+    activity_id: str
+    project_id: str
+    kind: str = "update"
+    text: str = ""
+    actor_type: str = "HUMAN"
+    actor_id: str = ""
+    actor_name: str = ""
+    created_at: Optional[datetime] = None
+
+
+class WorkbenchWorkerOut(BaseModel):
+    worker_id: str
+    name: str
+    employee_no: str = ""
+    status: str = "ON_DUTY"
+    activity: str = "online"  # online | working | offline
+    current_task_title: str = ""
+    progress_pct: int = 0
+    description: str = ""
+    today_task_count: int = 0
+    today_done_count: int = 0
+    week_done_count: int = 0
+
+
+class WorkbenchApprovalOut(BaseModel):
+    msg_id: str
+    task_id: str
+    item_id: Optional[str] = None
+    item_name: str = ""
+    project_name: str = ""
+    worker_name: str = ""
+    title: str = ""
+    status: str = "PENDING"
+    created_at: Optional[datetime] = None
+
+
+class WorkbenchActivityOut(BaseModel):
+    id: str
+    kind: str = "completed"
+    worker_id: str = ""
+    worker_name: str = ""
+    text: str = ""
+    created_at: Optional[datetime] = None
+
+
+class WorkbenchOut(BaseModel):
+    projects: List[ProjectOut] = []
+    workers: List[WorkbenchWorkerOut] = []
+    pending_approvals: List[WorkbenchApprovalOut] = []
+    workload_done: int = 0
+    workload_total: int = 0
+    recent_activities: List[WorkbenchActivityOut] = []

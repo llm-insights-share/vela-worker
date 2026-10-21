@@ -41,6 +41,10 @@
             <UserOutlined />
             <span>用户管理</span>
           </a-menu-item>
+          <a-menu-item key="/demo">
+            <DesktopOutlined />
+            <span>办公工作台</span>
+          </a-menu-item>
           <a-menu-item key="/im">
             <MessageOutlined />
             <span>工作沟通</span>
@@ -96,11 +100,12 @@
             </a-dropdown>
           </div>
         </a-layout-header>
-        <a-layout-content :class="['content', { 'content-flush': isIm }]">
+        <a-layout-content :class="['content', { 'content-flush': isIm || isDemo }]">
           <router-view />
         </a-layout-content>
       </a-layout>
     </a-layout>
+    <OpsCommandFab v-if="auth.isLoggedIn" />
   </a-config-provider>
 </template>
 
@@ -117,11 +122,13 @@ import {
   ProfileOutlined,
   UserOutlined,
   BellOutlined,
+  DesktopOutlined,
 } from '@ant-design/icons-vue'
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
 import { useAuthStore } from './stores/auth'
 import { inboxApi } from './api'
 import { formatDateTimeShort } from './utils/datetime'
+import OpsCommandFab from './components/ops/OpsCommandFab.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -136,6 +143,7 @@ let inboxTimer = null
 
 const isAuthPage = computed(() => route.path === '/login' || route.path === '/register')
 const isIm = computed(() => route.path.startsWith('/im'))
+const isDemo = computed(() => route.path.startsWith('/demo'))
 
 async function fetchInboxUnread() {
   try {

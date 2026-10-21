@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 from models import (
     DigitalWorker, DigitalRole, Department, Duty, DutyStatus, EmployeeCounter,
     WorkerSpecHistory, WorkerAuditLog, WorkerStatus, WorkerDutyAgent,
-    WorkerDutySource, WorkerDutyStatus, gen_uuid, now_utc,
+    WorkerDutySource, WorkerDutyStatus, WorkerPushRule, WorkerImSession,
+    WorkTask, TaskEvent, WebhookDelivery, ProjectItem, ConversationMember,
+    MemberType, gen_uuid, now_utc,
 )
 from config import SHARED_KB_IDS, ENTRY_MODEL_SERVICE_ID
 from services.vela_agent_client import vela_agent_client, VelaAgentError
@@ -167,21 +169,28 @@ def _create_and_publish_duty_agent(
     )
 
     try:
+        # memory_enabled is not part of AgentCreate; apply via config API after create
+        memory_enabled = bool(agent_payload.pop("memory_enabled", True))
         agent = vela_agent_client.create_agent(agent_payload)
         agent_id = agent["agent_id"]
+        # create_agent already applies skill/kb/tool_bindings; keep binds as safety net
         if agent_payload.get("skill_pack_ids"):
-            vela_agent_client.bind_skills(agent_id, agent_payload["skill_pack_ids"])
+            try:
+                vela_agent_client.bind_skills(agent_id, agent_payload["skill_pack_ids"])
+            except Exception:
+                pass
         if agent_payload.get("knowledge_base_ids"):
-            vela_agent_client.bind_knowledge_bases(agent_id, agent_payload["knowledge_base_ids"])
+            try:
+                vela_agent_client.bind_knowledge_bases(agent_id, agent_payload["knowledge_base_ids"])
+            except Exception:
+                pass
         if agent_payload.get("tool_bindings"):
-            vela_agent_client.bind_tools(agent_id, agent_payload["tool_bindings"])
-        try:
-            vela_agent_client.update_agent(agent_id, {
-                "memory_enabled": agent_payload.get("memory_enabled", True),
-                "change_summary": "enable memory",
-            })
-        except Exception:
-            pass
+            try:
+                vela_agent_client.bind_tools(agent_id, agent_payload["tool_bindings"])
+            except Exception:
+                pass
+        if memory_enabled:
+            vela_agent_client.set_memory_enabled(agent_id, True)
         vela_agent_client.validate_agent(agent_id)
         vela_agent_client.publish_agent(agent_id, f"数字员工 {worker_name} 职责 {duty.name}")
         return agent_id
@@ -1176,3 +1185,57 @@ def set_worker_status(db: Session, worker_id: str, status: str, actor_id: str = 
     db.commit()
     db.refresh(worker)
     return worker
+
+
+def delete_worker(db: Session, worker_id: str, actor_id: str = "system") -> None:
+    """Permanently delete a digital worker and related local records."""
+    worker = db.query(DigitalWorker).filter(DigitalWorker.worker_id == worker_id).first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="数字员工不存在")
+
+    wdas = db.query(WorkerDutyAgent).filter(WorkerDutyAgent.worker_id == worker_id).all()
+    agent_ids = [wda.agent_id for wda in wdas if wda.agent_id]
+    if worker.entry_agent_id:
+        agent_ids.append(worker.entry_agent_id)
+    if worker.reception_agent_id:
+        agent_ids.append(worker.reception_agent_id)
+    for aid in agent_ids:
+        try:
+            vela_agent_client.deprecate_agent(aid)
+        except Exception:
+            pass
+
+    # Detach project items that reference this worker / its tasks
+    task_ids = [
+        t.task_id for t in db.query(WorkTask.task_id).filter(WorkTask.worker_id == worker_id).all()
+    ]
+    if task_ids:
+        db.query(ProjectItem).filter(ProjectItem.task_id.in_(task_ids)).update(
+            {ProjectItem.task_id: None}, synchronize_session=False
+        )
+        db.query(TaskEvent).filter(TaskEvent.task_id.in_(task_ids)).delete(synchronize_session=False)
+        db.query(WebhookDelivery).filter(WebhookDelivery.task_id.in_(task_ids)).delete(synchronize_session=False)
+        db.query(WorkTask).filter(WorkTask.worker_id == worker_id).delete(synchronize_session=False)
+
+    db.query(ProjectItem).filter(ProjectItem.worker_id == worker_id).update(
+        {ProjectItem.worker_id: None}, synchronize_session=False
+    )
+    db.query(WorkerDutyAgent).filter(WorkerDutyAgent.worker_id == worker_id).delete(synchronize_session=False)
+    db.query(WorkerSpecHistory).filter(WorkerSpecHistory.worker_id == worker_id).delete(synchronize_session=False)
+    db.query(WorkerPushRule).filter(WorkerPushRule.worker_id == worker_id).delete(synchronize_session=False)
+    db.query(WorkerImSession).filter(WorkerImSession.worker_id == worker_id).delete(synchronize_session=False)
+    db.query(WorkerAuditLog).filter(WorkerAuditLog.worker_id == worker_id).delete(synchronize_session=False)
+    db.query(ConversationMember).filter(
+        ConversationMember.member_type == MemberType.WORKER,
+        ConversationMember.member_id == worker_id,
+    ).delete(synchronize_session=False)
+
+    db.add(WorkerAuditLog(
+        worker_id=worker_id,
+        actor_type="HUMAN",
+        actor_id=actor_id,
+        action="WORKER_DELETED",
+        detail={"name": worker.name, "employee_no": worker.employee_no},
+    ))
+    db.delete(worker)
+    db.commit()

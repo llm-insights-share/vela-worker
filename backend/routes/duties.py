@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from database import get_db
-from models import Duty, DutyStatus, DigitalRole, now_utc, gen_uuid
+from models import Duty, DutyStatus, DigitalRole, WorkerDutyAgent, WorkerDutyStatus, now_utc, gen_uuid
 from schemas import DutyCreate, DutyUpdate, DutyResponse, PaginatedResponse
 from deps import require_admin, get_current_user
 from models import HumanUser
@@ -162,6 +162,48 @@ def update_duty(
     db.commit()
     db.refresh(duty)
     return _duty_dict(duty)
+
+
+@router.delete("/{duty_id}", status_code=204)
+def delete_duty(
+    duty_id: str,
+    db: Session = Depends(get_db),
+    user: HumanUser = Depends(require_admin),
+):
+    duty = db.query(Duty).filter(Duty.duty_id == duty_id).first()
+    if not duty:
+        raise HTTPException(status_code=404, detail="职责不存在")
+
+    active_links = db.query(WorkerDutyAgent).filter(
+        WorkerDutyAgent.duty_id == duty_id,
+        WorkerDutyAgent.status == WorkerDutyStatus.ACTIVE,
+    ).count()
+    if active_links:
+        raise HTTPException(
+            status_code=400,
+            detail=f"仍有 {active_links} 个数字员工在使用该职责，请先在员工职责中移除后再删除",
+        )
+
+    # Clean inactive worker-duty links
+    inactive = db.query(WorkerDutyAgent).filter(WorkerDutyAgent.duty_id == duty_id).all()
+    for wda in inactive:
+        if wda.agent_id:
+            try:
+                vela_agent_client.deprecate_agent(wda.agent_id)
+            except Exception:
+                pass
+    db.query(WorkerDutyAgent).filter(WorkerDutyAgent.duty_id == duty_id).delete(synchronize_session=False)
+
+    # Strip from role.duty_ids JSON lists
+    roles = db.query(DigitalRole).all()
+    for role in roles:
+        ids = list(role.duty_ids or [])
+        if duty_id in ids:
+            role.duty_ids = [d for d in ids if d != duty_id]
+
+    db.delete(duty)
+    db.commit()
+    return None
 
 
 @router.get("/{duty_id}/roles")

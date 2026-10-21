@@ -8,3 +8,4 @@ ADMIN_PASSWORD = os.getenv("VELA_WORKER_ADMIN_PASSWORD", "admin123")
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 AVATAR_DIR = DATA_DIR / "avatars"
+PROJECT_DOCS_DIR = DATA_DIR / "project_docs"

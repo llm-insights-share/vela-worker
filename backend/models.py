@@ -2,7 +2,7 @@ import uuid
 import enum
 from datetime import datetime, timezone
 from sqlalchemy import (
-    Column, String, Integer, Boolean, DateTime, Text, ForeignKey, JSON, Enum as SAEnum, UniqueConstraint,
+    Column, String, Integer, Boolean, Date, DateTime, Text, ForeignKey, JSON, Enum as SAEnum, UniqueConstraint,
 )
 from database import Base
 
@@ -56,6 +56,31 @@ class TaskSource(str, enum.Enum):
     IM = "IM"
     OPEN_API = "OPEN_API"
     BPM = "BPM"
+
+
+class ProjectStatus(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+    SUSPENDED = "SUSPENDED"
+    COMPLETED = "COMPLETED"
+    ARCHIVED = "ARCHIVED"
+
+
+class ProjectItemStatus(str, enum.Enum):
+    TODO = "TODO"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    DELEGATED = "DELEGATED"
+    SUSPENDED = "SUSPENDED"
+
+
+class ProjectDocSource(str, enum.Enum):
+    UPLOAD = "UPLOAD"
+    AI_GENERATED = "AI_GENERATED"
+
+
+class ProjectOwnerType(str, enum.Enum):
+    HUMAN = "HUMAN"
+    WORKER = "WORKER"
 
 
 class ConvType(str, enum.Enum):
@@ -214,7 +239,11 @@ class WorkTask(Base):
     callback_url = Column(String(1024), default="")
     callback_events = Column(JSON, default=list)
     agent_session_id = Column(String, default="")
+    project_id = Column(String, ForeignKey("projects.project_id"), nullable=True, index=True)
+    item_id = Column(String, ForeignKey("project_items.item_id"), nullable=True, index=True)
     progress_note = Column(Text, default="")
+    progress_pct = Column(Integer, default=0)
+    progress_steps = Column(JSON, default=list)
     result = Column(JSON, default=dict)
     artifacts = Column(JSON, default=list)
     tokens_used = Column(Integer, default=0)
@@ -371,4 +400,71 @@ class InboxMessage(Base):
     related_id = Column(String(128), default="")
     is_read = Column(Boolean, default=False, index=True)
     read_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=now_utc)
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    project_id = Column(String, primary_key=True, default=gen_uuid)
+    owner_id = Column(String, ForeignKey("human_users.user_id"), nullable=False, index=True)
+    name = Column(String(256), nullable=False)
+    description = Column(Text, default="")
+    status = Column(SAEnum(ProjectStatus), default=ProjectStatus.ACTIVE)
+    progress_pct = Column(Integer, default=0)
+    sort = Column(Integer, default=0)
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+    created_at = Column(DateTime, default=now_utc)
+    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
+
+
+class ProjectItem(Base):
+    __tablename__ = "project_items"
+
+    item_id = Column(String, primary_key=True, default=gen_uuid)
+    project_id = Column(String, ForeignKey("projects.project_id"), nullable=False, index=True)
+    parent_id = Column(String, ForeignKey("project_items.item_id"), nullable=True, index=True)
+    name = Column(String(256), nullable=False)
+    description = Column(Text, default="")
+    status = Column(SAEnum(ProjectItemStatus), default=ProjectItemStatus.TODO)
+    sort = Column(Integer, default=0)
+    worker_id = Column(String, ForeignKey("digital_workers.worker_id"), nullable=True, index=True)
+    task_id = Column(String, ForeignKey("work_tasks.task_id"), nullable=True, index=True)
+    progress_pct = Column(Integer, default=0)
+    meta = Column(JSON, default=dict)
+    planned_start = Column(DateTime, nullable=True)
+    planned_end = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=now_utc)
+    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
+
+
+class ProjectDocument(Base):
+    __tablename__ = "project_documents"
+
+    doc_id = Column(String, primary_key=True, default=gen_uuid)
+    project_id = Column(String, ForeignKey("projects.project_id"), nullable=False, index=True)
+    name = Column(String(512), nullable=False)
+    file_path = Column(String(1024), default="")
+    mime_type = Column(String(128), default="")
+    size_bytes = Column(Integer, default=0)
+    source = Column(SAEnum(ProjectDocSource), default=ProjectDocSource.UPLOAD)
+    owner_type = Column(SAEnum(ProjectOwnerType), default=ProjectOwnerType.HUMAN)
+    owner_id = Column(String, default="")
+    owner_name = Column(String(128), default="")
+    created_at = Column(DateTime, default=now_utc)
+    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
+
+
+class ProjectActivity(Base):
+    __tablename__ = "project_activities"
+
+    activity_id = Column(String, primary_key=True, default=gen_uuid)
+    project_id = Column(String, ForeignKey("projects.project_id"), nullable=False, index=True)
+    kind = Column(String(64), default="update")
+    text = Column(Text, default="")
+    actor_type = Column(SAEnum(ProjectOwnerType), default=ProjectOwnerType.HUMAN)
+    actor_id = Column(String, default="")
+    actor_name = Column(String(128), default="")
     created_at = Column(DateTime, default=now_utc)

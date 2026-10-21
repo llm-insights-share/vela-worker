@@ -212,11 +212,18 @@ class VelaAgentClient:
     def validate_agent(self, agent_id: str) -> dict:
         return self._post(f"/agents/{agent_id}/validate")
 
-    def publish_agent(self, agent_id: str, change_summary: str = "数字员工入职发布") -> dict:
-        return self._post(
-            f"/agents/{agent_id}/publish",
-            {"publish_strategy": "blue-green"},
-        )
+    def publish_agent(self, agent_id: str, change_summary: str = "数字员工入职发布", **kwargs) -> dict:
+        if change_summary:
+            try:
+                self.update_agent(agent_id, {"change_summary": change_summary})
+            except Exception:
+                pass
+        body = {"publish_strategy": kwargs.get("publish_strategy", "blue-green")}
+        if kwargs.get("version_id"):
+            body["version_id"] = kwargs["version_id"]
+        if kwargs.get("canary_percent") is not None:
+            body["canary_percent"] = kwargs["canary_percent"]
+        return self._post(f"/agents/{agent_id}/publish", body)
 
     def bind_skills(self, agent_id: str, skill_pack_ids: List[str]) -> dict:
         return self._put(f"/agents/{agent_id}/skills", skill_pack_ids)
@@ -224,9 +231,18 @@ class VelaAgentClient:
     def bind_knowledge_bases(self, agent_id: str, kb_ids: List[str]) -> dict:
         return self._put(f"/agents/{agent_id}/knowledge-bases", kb_ids)
 
+    def create_tool(self, payload: dict) -> dict:
+        return self._post("/tools", payload)
+
+    def update_tool(self, tool_id: str, payload: dict) -> dict:
+        return self._put(f"/tools/{tool_id}", payload)
+
     def bind_tools(self, agent_id: str, tool_bindings: List[dict]) -> dict:
-        """tool_bindings: [{tool_id, require_approval}] or [tool_id]"""
+        """Prefer [{tool_id, require_approval}]; also accepts [tool_id] or {tool_ids: [...]}."""
         return self._put(f"/agents/{agent_id}/tools", tool_bindings)
+
+    def get_agent_tools(self, agent_id: str) -> Any:
+        return self._get(f"/agents/{agent_id}/tools")
 
     # --- Composition (COMPOSITE entry agent) ---
 
@@ -257,8 +273,14 @@ class VelaAgentClient:
     def update_coordinator_config(self, agent_id: str, config: dict) -> dict:
         return self._put(f"/agents/{agent_id}/composition/coordinator", config)
 
+    def get_memory_agent_mounts(self) -> Any:
+        return self._get("/config/memory/agents")
+
     def set_memory_enabled(self, agent_id: str, enabled: bool = True) -> dict:
         return self._put("/config/memory/agents", {"items": [{"agent_id": agent_id, "memory_enabled": enabled}]})
+
+    def process_session_memory(self, session_id: str) -> dict:
+        return self._post(f"/memory/process/{session_id}")
 
     # --- Sessions ---
 
@@ -268,16 +290,23 @@ class VelaAgentClient:
         caller_type: str = "WORKER_TASK",
         caller_id: str = "",
         token_budget: int = 100000,
+        ttl_seconds: int = None,
+        version_id: str = None,
+        connector_ids: List[str] = None,
     ) -> dict:
-        return self._post(
-            "/sessions",
-            {
-                "agent_id": agent_id,
-                "caller_type": caller_type,
-                "caller_id": caller_id,
-                "token_budget": token_budget,
-            },
-        )
+        payload: Dict[str, Any] = {
+            "agent_id": agent_id,
+            "caller_type": caller_type,
+            "caller_id": caller_id,
+            "token_budget": token_budget,
+        }
+        if ttl_seconds is not None:
+            payload["ttl_seconds"] = ttl_seconds
+        if version_id:
+            payload["version_id"] = version_id
+        if connector_ids:
+            payload["connector_ids"] = connector_ids
+        return self._post("/sessions", payload)
 
     def get_session(self, session_id: str) -> dict:
         return self._get(f"/sessions/{session_id}")

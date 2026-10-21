@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from database import init_db, SessionLocal
 from seed import seed_if_empty
 from config import PUSH_LOOP_INTERVAL
-from auth_config import AVATAR_DIR
+from auth_config import AVATAR_DIR, PROJECT_DOCS_DIR
 
 from routes.auth import router as auth_router
 from routes.users import router as users_router
@@ -21,6 +21,8 @@ from routes.tasks import router as tasks_router, ws_router
 from routes.open_api import apps_router, open_router
 from routes.push import router as push_router
 from routes.inbox import router as inbox_router
+from routes.projects import router as projects_router
+from routes.ops_assistant import router as ops_assistant_router
 
 
 async def _webhook_loop():
@@ -55,8 +57,10 @@ async def _push_loop():
 async def lifespan(app: FastAPI):
     init_db()
     AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+    PROJECT_DOCS_DIR.mkdir(parents=True, exist_ok=True)
     db = SessionLocal()
     try:
+        # Bootstrap org/users only — demo/scenario seeds are disabled
         seed_if_empty(db)
     finally:
         db.close()
@@ -74,7 +78,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Vela Worker API",
     description="AI Agent 数字员工服务",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -101,9 +105,13 @@ app.include_router(apps_router)
 app.include_router(open_router)
 app.include_router(push_router)
 app.include_router(inbox_router)
+app.include_router(projects_router)
+app.include_router(ops_assistant_router)
 
 AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+PROJECT_DOCS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/avatars", StaticFiles(directory=str(AVATAR_DIR)), name="avatars")
+app.mount("/project-docs", StaticFiles(directory=str(PROJECT_DOCS_DIR)), name="project-docs")
 
 
 @app.get("/api/v1/health")

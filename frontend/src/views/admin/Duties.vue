@@ -19,7 +19,10 @@
             <span v-else style="color:#9e9590">未选择</span>
           </template>
           <template v-else-if="column.key === 'action'">
-            <a @click="openEdit(record)">编辑</a>
+            <a-space>
+              <a @click="openEdit(record)">编辑</a>
+              <a style="color:#b5341c" @click="confirmDelete(record)">删除</a>
+            </a-space>
           </template>
         </template>
       </a-table>
@@ -63,7 +66,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import { dutyApi, catalogApi } from '../../api'
 
 const loading = ref(false)
@@ -91,7 +94,7 @@ const columns = [
   { title: '任务类型', key: 'task_types' },
   { title: '对应 Agent', key: 'agent', ellipsis: true },
   { title: '状态', dataIndex: 'status', key: 'status', width: 90 },
-  { title: '操作', key: 'action', width: 80 },
+  { title: '操作', key: 'action', width: 120 },
 ]
 
 async function load() {
@@ -147,6 +150,26 @@ function openEdit(record) {
     ]
   }
   modalOpen.value = true
+}
+
+function confirmDelete(record) {
+  Modal.confirm({
+    title: '删除职责',
+    content: `确认删除「${record.name}」？若仍有数字员工绑定该职责将无法删除。`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      try {
+        await dutyApi.remove(record.duty_id)
+        message.success('已删除')
+        await load()
+      } catch (e) {
+        message.error(e.message)
+        throw e
+      }
+    },
+  })
 }
 
 async function submit() {

@@ -38,6 +38,8 @@
                     <a-menu-item key="ON_DUTY">设为在岗</a-menu-item>
                     <a-menu-item key="SUSPENDED">停用</a-menu-item>
                     <a-menu-item key="OFFBOARDED">离职</a-menu-item>
+                    <a-menu-divider />
+                    <a-menu-item key="DELETE" danger>删除</a-menu-item>
                   </a-menu>
                 </template>
               </a-dropdown>
@@ -364,7 +366,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import { workerApi, roleApi, orgApi, catalogApi, dutyApi } from '../../api'
 
 const loading = ref(false)
@@ -608,6 +610,26 @@ async function onMore(record, key) {
     } catch (e) {
       message.error(e.message)
     }
+    return
+  }
+  if (key === 'DELETE') {
+    Modal.confirm({
+      title: '删除数字员工',
+      content: `确认删除「${record.name}」？删除后不可恢复，相关任务与编排记录将一并清理。`,
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      async onOk() {
+        try {
+          await workerApi.remove(record.worker_id)
+          message.success('已删除')
+          await load()
+        } catch (e) {
+          message.error(e.message)
+          throw e
+        }
+      },
+    })
     return
   }
   try {

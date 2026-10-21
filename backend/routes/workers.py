@@ -90,6 +90,16 @@ def update_worker(
     return worker_service._worker_response_fields(db, worker)
 
 
+@router.delete("/{worker_id}", status_code=204)
+def delete_worker(
+    worker_id: str,
+    db: Session = Depends(get_db),
+    user: HumanUser = Depends(require_admin),
+):
+    worker_service.delete_worker(db, worker_id, actor_id=user.user_id)
+    return None
+
+
 @router.get("/{worker_id}/spec")
 def get_worker_spec(worker_id: str, db: Session = Depends(get_db), user: HumanUser = Depends(get_current_user)):
     worker = db.query(DigitalWorker).filter(DigitalWorker.worker_id == worker_id).first()

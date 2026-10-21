@@ -37,6 +37,10 @@ const routes = [
     component: () => import('../views/im/ImLayout.vue'),
   },
   {
+    path: '/demo',
+    component: () => import('../views/demo/DemoWorkbench.vue'),
+  },
+  {
     path: '/me/settings',
     component: () => import('../views/settings/UserSettings.vue'),
   },

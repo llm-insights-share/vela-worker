@@ -19,7 +19,10 @@
             <a-tag v-for="t in (record.task_types || [])" :key="t" color="blue">{{ t }}</a-tag>
           </template>
           <template v-else-if="column.key === 'action'">
-            <a @click="openEdit(record)">编辑</a>
+            <a-space>
+              <a @click="openEdit(record)">编辑</a>
+              <a style="color:#b5341c" @click="confirmDelete(record)">删除</a>
+            </a-space>
           </template>
         </template>
       </a-table>
@@ -74,7 +77,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import { roleApi, dutyApi } from '../../api'
 
 const loading = ref(false)
@@ -103,7 +106,7 @@ const columns = [
   { title: '任务类型', key: 'task_types' },
   { title: '版本', dataIndex: 'version', key: 'version', width: 70 },
   { title: '状态', dataIndex: 'status', key: 'status', width: 90 },
-  { title: '操作', key: 'action', width: 80 },
+  { title: '操作', key: 'action', width: 120 },
 ]
 
 async function load() {
@@ -143,6 +146,26 @@ function openEdit(record) {
   dutyText.value = (record.duty_scope || []).join('\n')
   outText.value = (record.out_of_scope || []).join('\n')
   modalOpen.value = true
+}
+
+function confirmDelete(record) {
+  Modal.confirm({
+    title: '删除角色',
+    content: `确认删除「${record.name}」？若仍有数字员工使用该角色将无法删除。`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      try {
+        await roleApi.remove(record.role_id)
+        message.success('已删除')
+        await load()
+      } catch (e) {
+        message.error(e.message)
+        throw e
+      }
+    },
+  })
 }
 
 async function submit() {

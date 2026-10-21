@@ -82,9 +82,9 @@ def seed_if_empty(db: Session):
             username="zhang",
             email="zhang@localhost",
             hashed_password=pwd,
-            name="张主管",
-            dept_id="dept-audit",
-            title="审计主管",
+            name="张经理",
+            dept_id="dept-hr",
+            title="人力资源经理",
             role=UserRole.DEPT_ADMIN,
         ),
         HumanUser(
@@ -110,6 +110,7 @@ def seed_if_empty(db: Session):
     ]
     db.add_all(users)
 
+    # Audit duties kept here for first-boot; HR duties added in seed_demo_workers
     duties = [
         Duty(
             duty_id="duty-material-collect",

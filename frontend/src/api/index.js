@@ -80,6 +80,8 @@ export const orgApi = {
   users: () => api.get('/org/users'),
   departments: () => api.get('/org/departments'),
   createDept: (data) => api.post('/org/departments', data),
+  updateDept: (id, data) => api.put(`/org/departments/${id}`, data),
+  removeDept: (id) => api.delete(`/org/departments/${id}`),
   createUser: (data) => api.post('/org/users', data),
 }
 
@@ -88,6 +90,7 @@ export const roleApi = {
   get: (id) => api.get(`/roles/${id}`),
   create: (data) => api.post('/roles', data),
   update: (id, data) => api.put(`/roles/${id}`, data),
+  remove: (id) => api.delete(`/roles/${id}`),
   workers: (id) => api.get(`/roles/${id}/workers`),
 }
 
@@ -96,6 +99,7 @@ export const dutyApi = {
   get: (id) => api.get(`/duties/${id}`),
   create: (data) => api.post('/duties', data),
   update: (id, data) => api.put(`/duties/${id}`, data),
+  remove: (id) => api.delete(`/duties/${id}`),
 }
 
 export const workerApi = {
@@ -108,6 +112,7 @@ export const workerApi = {
   duties: (id) => api.get(`/workers/${id}/duties`),
   addDuty: (id, data) => api.post(`/workers/${id}/duties`, data),
   removeDuty: (id, dutyId) => api.delete(`/workers/${id}/duties/${dutyId}`),
+  remove: (id) => api.delete(`/workers/${id}`),
   repairEntry: (id) => api.post(`/workers/${id}/repair-entry`),
   pushRules: (id) => api.get(`/workers/${id}/push-rules`),
   createPushRule: (id, data) => api.post(`/workers/${id}/push-rules`, data),
@@ -162,4 +167,42 @@ export const inboxApi = {
   unreadCount: () => api.get('/inbox/unread-count'),
   markRead: (id) => api.post(`/inbox/messages/${id}/read`),
   markTaskRead: (taskId) => api.post(`/inbox/tasks/${taskId}/read`),
+}
+
+export const projectApi = {
+  workbench: () => api.get('/projects/workbench'),
+  list: () => api.get('/projects'),
+  get: (id) => api.get(`/projects/${id}`),
+  create: (data) => api.post('/projects', data),
+  update: (id, data) => api.patch(`/projects/${id}`, data),
+  remove: (id) => api.delete(`/projects/${id}`),
+  items: (projectId) => api.get(`/projects/${projectId}/items`),
+  createItem: (projectId, data) => api.post(`/projects/${projectId}/items`, data),
+  getItem: (itemId) => api.get(`/projects/items/${itemId}`),
+  updateItem: (itemId, data) => api.patch(`/projects/items/${itemId}`, data),
+  removeItem: (itemId) => api.delete(`/projects/items/${itemId}`),
+  delegate: (itemId, data) => api.post(`/projects/items/${itemId}/delegate`, data),
+  startItem: (itemId) => api.post(`/projects/items/${itemId}/start`),
+  resumeItem: (itemId) => api.post(`/projects/items/${itemId}/resume`),
+  members: (projectId) => api.get(`/projects/${projectId}/members`),
+  documents: (projectId) => api.get(`/projects/${projectId}/documents`),
+  uploadDocument: (projectId, file) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post(`/projects/${projectId}/documents`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  activities: (projectId) => api.get(`/projects/${projectId}/activities`),
+}
+
+export const opsAssistantApi = {
+  meta: () => api.get('/ops-assistant'),
+  createSession: () => api.post('/ops-assistant/sessions'),
+  getSession: (sessionId) => api.get(`/ops-assistant/sessions/${sessionId}`),
+  send: (sessionId, message) => api.post(`/ops-assistant/sessions/${sessionId}/messages`, { message }),
+  approve: (sessionId, approvalId, comment = '') =>
+    api.post(`/ops-assistant/sessions/${sessionId}/approvals/${approvalId}/approve`, { comment }),
+  reject: (sessionId, approvalId, comment = '') =>
+    api.post(`/ops-assistant/sessions/${sessionId}/approvals/${approvalId}/reject`, { comment }),
 }

@@ -125,6 +125,28 @@ def update_role(
     return _role_dict(db, role)
 
 
+@router.delete("/{role_id}", status_code=204)
+def delete_role(
+    role_id: str,
+    db: Session = Depends(get_db),
+    user: HumanUser = Depends(require_admin),
+):
+    role = db.query(DigitalRole).filter(DigitalRole.role_id == role_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="角色不存在")
+
+    worker_count = db.query(DigitalWorker).filter(DigitalWorker.role_id == role_id).count()
+    if worker_count:
+        raise HTTPException(
+            status_code=400,
+            detail=f"仍有 {worker_count} 个数字员工使用该角色，请先调整员工角色后再删除",
+        )
+
+    db.delete(role)
+    db.commit()
+    return None
+
+
 @router.get("/{role_id}/workers")
 def list_role_workers(role_id: str, db: Session = Depends(get_db), user: HumanUser = Depends(get_current_user)):
     workers = db.query(DigitalWorker).filter(DigitalWorker.role_id == role_id).all()

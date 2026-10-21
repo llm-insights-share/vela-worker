@@ -111,6 +111,10 @@ def set_user_roles(
 
 @router.delete("/{user_id}")
 def delete_user(user_id: str, admin: PlatformAdminUser, db: Session = Depends(get_db)):
+    from models import Project, InboxMessage
+    from sqlalchemy.exc import IntegrityError
+    from services.project_service import delete_project
+
     user = db.query(HumanUser).filter(HumanUser.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -120,6 +124,26 @@ def delete_user(user_id: str, admin: PlatformAdminUser, db: Session = Depends(ge
     if role == UserRole.PLATFORM_ADMIN.value and user.status == "ACTIVE":
         if _count_active_platform_admins(db, exclude_id=user.user_id) < 1:
             raise HTTPException(status_code=400, detail="Cannot delete the last platform admin")
-    db.delete(user)
-    db.commit()
+
+    # Cascade-delete owned projects (FK projects.owner_id → human_users).
+    # Workbench only lists the current user's projects, so admins often cannot
+    # manually clear another user's projects before delete.
+    owned_projects = db.query(Project).filter(Project.owner_id == user_id).all()
+    for project in list(owned_projects):
+        delete_project(db, project)
+
+    db.query(InboxMessage).filter(InboxMessage.user_id == user_id).delete(synchronize_session=False)
+
+    try:
+        user = db.query(HumanUser).filter(HumanUser.user_id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        db.delete(user)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="无法删除该用户：仍有关联业务数据，请先清理后再试",
+        )
     return {"ok": True}

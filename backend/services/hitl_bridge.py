@@ -2,9 +2,10 @@
 from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from models import WorkTask, Message, TaskStatus, DigitalWorker, MemberType, gen_uuid, now_utc
+from models import WorkTask, Message, TaskStatus, DigitalWorker, MemberType, gen_uuid, now_utc, WorkerAuditLog
 from services.vela_agent_client import vela_agent_client, VelaAgentError
 from services.im_service import push_message
+from services.project_service import sync_item_from_task
 from sqlalchemy.orm.attributes import flag_modified
 
 
@@ -111,6 +112,8 @@ async def _follow_up_after_approval(
             task.status = TaskStatus.RUNNING
             task.status_detail = "审批通过，继续执行"
         db.commit()
+        sync_item_from_task(db, task)
+        db.commit()
 
         if pending_aid and task.conv_id and session_id:
             worker = db.query(DigitalWorker).filter(DigitalWorker.worker_id == task.worker_id).first()
@@ -179,7 +182,14 @@ async def handle_approval(
             raise HTTPException(status_code=400, detail=f"请填写参数: {', '.join(still)}")
 
     try:
-        if approved:
+        # Offline demo sessions: skip real vela-agent and close the loop locally.
+        if str(session_id).startswith("demo-session-"):
+            result = {
+                "ok": True,
+                "demo": True,
+                "session_status": "RUNNING" if approved else "CANCELLED",
+            }
+        elif approved:
             result = vela_agent_client.approve(
                 session_id,
                 approval_id,
@@ -204,6 +214,23 @@ async def handle_approval(
     content["reviewed_at"] = now_utc().isoformat()
     msg.content = content
     flag_modified(msg, "content")
+    db.commit()
+
+    task = db.query(WorkTask).filter(WorkTask.task_id == msg.ref_task_id).first() if msg.ref_task_id else None
+    db.add(WorkerAuditLog(
+        worker_id=msg.sender_id or (task.worker_id if task else ""),
+        task_id=msg.ref_task_id or "",
+        actor_type="HUMAN",
+        actor_id=reviewer,
+        action="APPROVAL_DECISION",
+        detail={
+            "msg_id": msg_id,
+            "approved": approved,
+            "comment": comment,
+            "approval_kind": content.get("approval_kind"),
+            "tool_name": content.get("tool_name"),
+        },
+    ))
     db.commit()
     await push_message(db, msg)
 
